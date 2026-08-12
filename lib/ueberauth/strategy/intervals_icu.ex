@@ -6,7 +6,7 @@ defmodule Ueberauth.Strategy.IntervalsIcu do
 
   Register an application at <https://intervals.icu/settings> to obtain a client
   id and secret, and register your exact callback URL. intervals.icu does **not**
-  support wildcards in redirect URIs — every callback URL must be registered in
+  support wildcards in redirect URIs. Every callback URL must be registered in
   full.
 
   Add the provider to your Ueberauth configuration:
@@ -22,21 +22,21 @@ defmodule Ueberauth.Strategy.IntervalsIcu do
 
   ## Options
 
-    * `:default_scope` — scopes requested when the request phase does not receive
+    * `:default_scope` - scopes requested when the request phase does not receive
       a `scope` query parameter. Defaults to `"ACTIVITY:READ,WELLNESS:READ"`.
 
-    * `:fetch_athlete` — whether to call the athlete endpoint after the token
+    * `:fetch_athlete` - whether to call the athlete endpoint after the token
       exchange to build a fuller `Ueberauth.Auth.Info`. Defaults to `true`.
       See "Fetching the athlete" below.
 
-    * `:userinfo_endpoint` — the endpoint used when `:fetch_athlete` is true.
+    * `:userinfo_endpoint` - the endpoint used when `:fetch_athlete` is true.
       Defaults to `"/api/v1/athlete/0"`. The athlete id `0` always means "the
       athlete this token belongs to".
 
-    * `:uid_field` — which athlete field becomes `Ueberauth.Auth.uid`. Defaults
+    * `:uid_field` - which athlete field becomes `Ueberauth.Auth.uid`. Defaults
       to `:id`.
 
-    * `:oauth2_module` — the module implementing the OAuth calls. Defaults to
+    * `:oauth2_module` - the module implementing the OAuth calls. Defaults to
       `Ueberauth.Strategy.IntervalsIcu.OAuth`.
 
   ## Scopes
@@ -64,7 +64,7 @@ defmodule Ueberauth.Strategy.IntervalsIcu do
       ]
 
   With `fetch_athlete: false` no extra request is made and the auth struct is
-  built from the athlete map inside the token response — you get `uid` and
+  built from the athlete map inside the token response. You get `uid` and
   `name`, but not `email` or the other profile fields.
 
   ## Tokens do not expire, and there are no refresh tokens
@@ -163,7 +163,7 @@ defmodule Ueberauth.Strategy.IntervalsIcu do
   @doc """
   The token, its type and its granted scopes.
 
-  `refresh_token`, `expires` and `expires_at` are always `nil`/`false` —
+  `refresh_token`, `expires` and `expires_at` are always `nil`/`false`, because
   intervals.icu issues neither refresh tokens nor expiring access tokens.
   """
   @impl Ueberauth.Strategy
@@ -183,7 +183,7 @@ defmodule Ueberauth.Strategy.IntervalsIcu do
   @doc """
   The athlete's profile information.
 
-  Only `:name` is guaranteed — it is present in the token response. The
+  Only `:name` is guaranteed, because it is present in the token response. The
   remaining fields depend on what the athlete endpoint returns and are `nil`
   when absent. The complete, untouched athlete map is always available via
   `extra/1`.
@@ -239,7 +239,7 @@ defmodule Ueberauth.Strategy.IntervalsIcu do
           error(
             "forbidden",
             "intervals.icu refused access to #{endpoint}. The granted scopes " <>
-              "(#{Enum.join(Token.scopes(token), ",")}) may not cover it — request " <>
+              "(#{Enum.join(Token.scopes(token), ",")}) may not cover it. Request " <>
               "SETTINGS:READ, or set `fetch_athlete: false` to build the auth " <>
               "struct from the token response instead."
           )

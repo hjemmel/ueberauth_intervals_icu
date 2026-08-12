@@ -17,7 +17,7 @@ end
 ## Registering your application
 
 1. Go to <https://intervals.icu/settings> and create an application to get a **client id** and **client secret**.
-2. Register your callback URL **in full**. intervals.icu does *not* support wildcards in redirect URIs, despite what some documentation suggests — `https://app.example.com/*` will not work. Register every callback URL you use, including your development one.
+2. Register your callback URL **in full**. intervals.icu does *not* support wildcards in redirect URIs, despite what some documentation suggests, so `https://app.example.com/*` will not work. Register every callback URL you use, including your development one.
 
 ## Configuration
 
@@ -87,7 +87,7 @@ Each scope takes a `:READ` or `:WRITE` suffix:
 | Scope | Covers |
 |---|---|
 | `ACTIVITY` | Activities, intervals, streams |
-| `WELLNESS` | Wellness records — weight, HRV, resting HR, sleep |
+| `WELLNESS` | Wellness records: weight, HRV, resting HR, sleep |
 | `CALENDAR` | Planned workouts and calendar events |
 | `CHATS` | Messages |
 | `LIBRARY` | Workout and plan library |
@@ -101,7 +101,7 @@ You can also request scopes per request, which overrides the configured default:
 /auth/intervals_icu?scope=CALENDAR:WRITE
 ```
 
-> **Note:** an `ATHLETES` scope exists but does not work with bearer tokens — it returns `403`. It only works with API keys.
+> **Note:** an `ATHLETES` scope exists but does not work with bearer tokens, where it returns `403`. It only works with API keys.
 
 ## Tokens do not expire, and there are no refresh tokens
 
@@ -110,7 +110,7 @@ This is the biggest way intervals.icu departs from a typical OAuth 2.0 provider,
 - There is **no refresh token** and **no expiry**. `auth.credentials` always comes back with `refresh_token: nil`, `expires: false` and `expires_at: nil`.
 - Store the access token and use it until it stops working. There is no refresh cycle to implement.
 - To recover from a rejected token, send the athlete through the flow again.
-- An athlete may hold several tokens for your app — one per authorisation. The most recently granted scopes apply to all of them.
+- An athlete may hold several tokens for your app, one per authorisation. The most recently granted scopes apply to all of them.
 
 To revoke a token:
 
@@ -130,7 +130,7 @@ Req.get!("https://intervals.icu/api/v1/athlete/0/activities",
 )
 ```
 
-An OAuth token only ever grants access to the authorising athlete's own data. Coaches cannot reach their athletes' data through a single connection — each athlete has to authorise your app separately.
+An OAuth token only ever grants access to the authorising athlete's own data. Coaches cannot reach their athletes' data through a single connection, so each athlete has to authorise your app separately.
 
 ## The athlete fetch, and when to turn it off
 
@@ -144,7 +144,7 @@ providers: [
 ]
 ```
 
-With `fetch_athlete: false` no extra request is made, and the auth struct is built from the athlete map already present in the token response. You still get `uid` and `name` — but not `email` or the other profile fields.
+With `fetch_athlete: false` no extra request is made, and the auth struct is built from the athlete map already present in the token response. You still get `uid` and `name`, but not `email` or the other profile fields.
 
 ## Options
 
@@ -167,7 +167,7 @@ config :ueberauth, Ueberauth.Strategy.IntervalsIcu.OAuth,
   req_options: [receive_timeout: 10_000]
 ```
 
-**Retries are off by default.** Req would otherwise retry transient failures with backoff, which is the wrong trade-off during an OAuth callback: the athlete is waiting on a redirect, so seconds of backoff before an inevitable failure is worse than failing fast — and the authorization code is only valid for **two minutes**, so a long retry chain can consume the window it is meant to protect. Opt back in with `req_options: [retry: :safe_transient]`.
+**Retries are off by default.** Req would otherwise retry transient failures with backoff, which is the wrong trade-off during an OAuth callback: the athlete is waiting on a redirect, so seconds of backoff before an inevitable failure is worse than failing fast. The authorization code is also only valid for **two minutes**, so a long retry chain can consume the window it is meant to protect. Opt back in with `req_options: [retry: :safe_transient]`.
 
 ## Error keys
 
@@ -177,10 +177,10 @@ Failures arrive as `conn.assigns.ueberauth_failure.errors`, each with a `message
 |---|---|
 | `access_denied` | The athlete declined (any `?error=` value is passed through under its own key) |
 | `missing_code` | The callback carried neither a code nor an error |
-| `token_error` | The token endpoint returned a non-200 — most often an expired code |
+| `token_error` | The token endpoint returned a non-200, most often an expired code |
 | `invalid_token_response` | The token endpoint returned 200 but no access token |
 | `token` | The athlete endpoint returned `401` |
-| `forbidden` | The athlete endpoint returned `403` — a scope problem; see above |
+| `forbidden` | The athlete endpoint returned `403`, a scope problem; see above |
 | `athlete_error` | The athlete endpoint returned another error status |
 | `invalid_athlete_response` | The athlete endpoint returned a success status but not a JSON object |
 | `network_error` | The request never completed |
@@ -188,4 +188,4 @@ Failures arrive as `conn.assigns.ueberauth_failure.errors`, each with a `message
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).

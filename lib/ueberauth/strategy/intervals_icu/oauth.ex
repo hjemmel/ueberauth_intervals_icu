@@ -25,9 +25,9 @@ defmodule Ueberauth.Strategy.IntervalsIcu.OAuth do
 
   ## Passing options to Req
 
-  Anything under `:req_options` is merged into every request — and wins over
-  this module's own defaults — which is how you supply a custom Finch pool, a
-  retry policy, timeouts, or a test plug:
+  Anything under `:req_options` is merged into every request, overriding this
+  module's own defaults. Use it to supply a custom Finch pool, a retry policy,
+  timeouts, or a test plug:
 
       config :ueberauth, Ueberauth.Strategy.IntervalsIcu.OAuth,
         client_id: "...",
@@ -39,7 +39,7 @@ defmodule Ueberauth.Strategy.IntervalsIcu.OAuth do
   Req retries transient failures with backoff out of the box. This module turns
   that off, because an OAuth callback is an interactive request: the athlete is
   waiting on a redirect, so several seconds of backoff before an inevitable
-  failure is worse than failing fast — and the authorization code is only valid
+  failure is worse than failing fast. The authorization code is also only valid
   for **two minutes**, so a long retry chain can consume the very window it is
   meant to protect.
 
@@ -129,8 +129,8 @@ defmodule Ueberauth.Strategy.IntervalsIcu.OAuth do
   Exchanges an authorization code for an access token.
 
   intervals.icu expects `client_id`, `client_secret` and `code` as
-  **form-encoded body parameters** — not HTTP Basic credentials — so that is
-  what this sends.
+  **form-encoded body parameters**, not HTTP Basic credentials, so that is what
+  this sends.
 
   The code is only valid for **two minutes** after the redirect.
 
@@ -212,7 +212,7 @@ defmodule Ueberauth.Strategy.IntervalsIcu.OAuth do
   # Req retries transient failures by default, with backoff. That is the wrong
   # trade-off during an OAuth callback: the athlete is waiting on a redirect, so
   # several seconds of backoff before an inevitable failure is worse than
-  # failing fast — and the authorization code is only valid for two minutes, so
+  # failing fast. The authorization code is also only valid for two minutes, so
   # a long retry chain can burn the window it is meant to protect.
   #
   # Applications that want retries can turn them back on via :req_options.
