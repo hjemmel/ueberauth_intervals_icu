@@ -1,7 +1,7 @@
 defmodule UeberauthIntervalsIcu.MixProject do
   use Mix.Project
 
-  @version "0.1.0"
+  @version "0.1.1"
   @source_url "https://github.com/hjemmel/ueberauth_intervals_icu"
 
   def project do
