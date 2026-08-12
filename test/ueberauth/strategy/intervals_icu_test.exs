@@ -40,6 +40,42 @@ defmodule Ueberauth.Strategy.IntervalsIcuTest do
     end
   end
 
+  # Regression: both phases used to read conn.params without fetching them.
+  # Under Phoenix that works, because params are always fetched by then. In a
+  # plain Plug pipeline the request phase raised ArgumentError, and the callback
+  # phase silently fell through to "missing_code" because %Plug.Conn.Unfetched{}
+  # never matches %{"code" => _}.
+  describe "connections whose params have not been fetched" do
+    test "the request phase fetches them itself" do
+      conn = strategy_conn(%{"scope" => "CALENDAR:READ"})
+
+      assert %Plug.Conn.Unfetched{} = conn.params
+
+      conn = IntervalsIcu.handle_request!(conn)
+
+      assert query_params(conn)["scope"] == "CALENDAR:READ"
+    end
+
+    test "the callback phase fetches them itself rather than reporting missing_code" do
+      stub_intervals_icu(token: token_response(), athlete: athlete_response())
+
+      conn = strategy_conn(%{"code" => "the-code"})
+
+      assert %Plug.Conn.Unfetched{} = conn.params
+
+      conn = IntervalsIcu.handle_callback!(conn)
+
+      refute Map.has_key?(conn.assigns, :ueberauth_failure)
+      assert IntervalsIcu.uid(conn) == "2049151"
+    end
+
+    test "a denial is still recognised without fetched params" do
+      conn = %{"error" => "access_denied"} |> strategy_conn() |> IntervalsIcu.handle_callback!()
+
+      assert error_keys(conn) == ["access_denied"]
+    end
+  end
+
   describe "handle_request!/1" do
     test "redirects to the intervals.icu authorize endpoint" do
       conn = IntervalsIcu.handle_request!(strategy_conn())

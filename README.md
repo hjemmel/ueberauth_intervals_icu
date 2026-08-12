@@ -72,6 +72,29 @@ defmodule MyAppWeb.AuthController do
 end
 ```
 
+## Without Phoenix
+
+Phoenix already does all of this for you. In a plain `Plug.Router` pipeline, two plugs must run **before** `plug Ueberauth`:
+
+```elixir
+plug :fetch_session       # Ueberauth's CSRF check calls fetch_session/1
+plug :fetch_query_params  # ...and reads conn.params["state"]
+plug Ueberauth
+```
+
+Both are required by Ueberauth itself, in `Ueberauth.Strategy.run_callback/2`, which runs before this strategy is reached. Leave either out and the callback raises `ArgumentError` instead of failing cleanly. Swap `:fetch_query_params` for `Plug.Parsers` if you accept POST callbacks.
+
+The cookie session store also needs `conn.secret_key_base` set.
+
+[`examples/oauth_demo.exs`](examples/oauth_demo.exs) is a complete, runnable pipeline — a single file you can point at a real intervals.icu application to check the whole flow end to end:
+
+```sh
+export INTERVALS_ICU_CLIENT_ID=... INTERVALS_ICU_CLIENT_SECRET=...
+elixir examples/oauth_demo.exs
+```
+
+It prints the raw athlete payload and lists any keys the strategy does not map, which is the quickest way to see what intervals.icu actually returns for your account.
+
 ## Scopes
 
 intervals.icu joins scopes with **commas**, not the spaces used by most OAuth 2.0 providers:

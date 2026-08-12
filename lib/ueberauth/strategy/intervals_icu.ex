@@ -78,6 +78,27 @@ defmodule Ueberauth.Strategy.IntervalsIcu do
 
       DELETE https://intervals.icu/api/v1/disconnect-app
       Authorization: Bearer <token>
+
+  ## Plain Plug pipelines
+
+  Under Phoenix everything below is already handled. In a bare `Plug.Router`
+  pipeline, two plugs must run **before** `plug Ueberauth`:
+
+      plug :fetch_session       # Ueberauth's CSRF check calls fetch_session/1
+      plug :fetch_query_params  # ...and reads conn.params["state"]
+      plug Ueberauth
+
+  Both are required by Ueberauth itself, in `Ueberauth.Strategy.run_callback/2`,
+  which runs before this strategy is reached. Without them the callback phase
+  raises `ArgumentError` rather than failing cleanly. Use `Plug.Parsers` in
+  place of `:fetch_query_params` if you accept POST callbacks.
+
+  This strategy additionally calls `Plug.Conn.fetch_query_params/1` in both
+  phases, so it behaves correctly even when the CSRF check is bypassed with
+  `ignores_csrf_attack: true`.
+
+  See `examples/oauth_demo.exs` in the repository for a complete working
+  pipeline.
   """
 
   use Ueberauth.Strategy,
@@ -100,6 +121,7 @@ defmodule Ueberauth.Strategy.IntervalsIcu do
   """
   @impl Ueberauth.Strategy
   def handle_request!(conn) do
+    conn = fetch_query_params(conn)
     scopes = conn.params["scope"] || option(conn, :default_scope)
 
     params =
@@ -118,7 +140,11 @@ defmodule Ueberauth.Strategy.IntervalsIcu do
   the athlete is fetched. A denial arrives as `?error=access_denied`.
   """
   @impl Ueberauth.Strategy
-  def handle_callback!(%Plug.Conn{params: %{"code" => code}} = conn) do
+  def handle_callback!(conn) do
+    conn |> fetch_query_params() |> do_handle_callback()
+  end
+
+  defp do_handle_callback(%Plug.Conn{params: %{"code" => code}} = conn) do
     params = [code: code]
     opts = [redirect_uri: callback_url(conn)]
 
@@ -131,12 +157,12 @@ defmodule Ueberauth.Strategy.IntervalsIcu do
     end
   end
 
-  def handle_callback!(%Plug.Conn{params: %{"error" => error_key}} = conn) do
+  defp do_handle_callback(%Plug.Conn{params: %{"error" => error_key}} = conn) do
     description = conn.params["error_description"] || error_key
     set_errors!(conn, [error(error_key, description)])
   end
 
-  def handle_callback!(conn) do
+  defp do_handle_callback(conn) do
     set_errors!(conn, [error("missing_code", "No authorization code received")])
   end
 

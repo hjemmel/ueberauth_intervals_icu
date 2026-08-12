@@ -66,17 +66,24 @@ defmodule Ueberauth.IntervalsIcu.TestHelpers do
 
   Ueberauth stores strategy options under `:ueberauth_request_options`, which is
   where `Ueberauth.Strategy.Helpers.options/1` and `callback_url/1` read from.
+
+  Parameters are passed as a real query string and deliberately left
+  **unfetched**, because that is how a connection arrives in a plain Plug
+  pipeline. Injecting `conn.params` directly would hide whether the strategy
+  fetches them itself.
   """
   def strategy_conn(params \\ %{}, opts \\ []) do
     :get
-    |> Plug.Test.conn("/auth/intervals_icu/callback")
-    |> Map.put(:params, params)
+    |> Plug.Test.conn("/auth/intervals_icu/callback" <> query_string(params))
     |> Plug.Conn.put_private(:ueberauth_request_options, %{
       options: opts,
       callback_url: @callback_url,
       strategy_name: :intervals_icu
     })
   end
+
+  defp query_string(params) when map_size(params) == 0, do: ""
+  defp query_string(params), do: "?" <> URI.encode_query(params)
 
   @doc """
   Adds the CSRF state parameter Ueberauth would have generated.
