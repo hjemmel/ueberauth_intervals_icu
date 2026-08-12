@@ -33,11 +33,21 @@ client_secret =
 
 # This must happen before the router module below is defined: `plug Ueberauth`
 # calls `Ueberauth.init/1` at compile time, and that reads application config.
+
+# fetch_athlete: false so that logging in always succeeds and hands us a token.
+# The probe below then asks intervals.icu directly which endpoints that token
+# can actually reach, which is more informative than the login failing outright.
+# Set INTERVALS_ICU_FETCH_ATHLETE=true to exercise the default behaviour.
+fetch_athlete? = System.get_env("INTERVALS_ICU_FETCH_ATHLETE") == "true"
+
+default_scope =
+  System.get_env("INTERVALS_ICU_SCOPE", "ACTIVITY:READ,WELLNESS:READ,SETTINGS:READ")
+
 Application.put_env(:ueberauth, Ueberauth,
   providers: [
     intervals_icu:
       {Ueberauth.Strategy.IntervalsIcu,
-       [default_scope: System.get_env("INTERVALS_ICU_SCOPE", "ACTIVITY:READ,WELLNESS:READ")]}
+       [default_scope: default_scope, fetch_athlete: fetch_athlete?]}
   ]
 )
 
@@ -77,10 +87,8 @@ defmodule Demo.Router do
     <h1>intervals.icu OAuth demo</h1>
     <p><a href="/auth/intervals_icu">Connect with intervals.icu</a> (default scope)</p>
     <p>
-      <a href="/auth/intervals_icu?scope=ACTIVITY:READ">without SETTINGS:READ</a>
-      &mdash; expected to fail with <code>forbidden</code>, because the athlete
-      endpoint requires it. Set <code>fetch_athlete: false</code> to use this
-      narrower scope.
+      <a href="/auth/intervals_icu?scope=ACTIVITY:READ">narrower scope, without SETTINGS:READ</a>
+      &mdash; for comparing which endpoints a token can reach.
     </p>
     """)
   end
@@ -102,7 +110,11 @@ defmodule Demo.Router do
     IO.puts("uid:         #{inspect(auth.uid)}")
     IO.puts("token:       #{String.slice(auth.credentials.token, 0, 8)}… (truncated)")
     IO.puts("token_type:  #{inspect(auth.credentials.token_type)}")
-    IO.puts("scopes:      #{inspect(auth.credentials.scopes)}")
+    # Requested vs granted matters: if SETTINGS:READ was asked for but is
+    # missing here, intervals.icu declined to grant it, which is a different
+    # problem from the endpoint rejecting a token that does carry it.
+    IO.puts("requested:   #{requested_scope()}")
+    IO.puts("granted:     #{Enum.join(auth.credentials.scopes, ",")}")
     IO.puts("expires:     #{inspect(auth.credentials.expires)}")
     IO.puts("refresh:     #{inspect(auth.credentials.refresh_token)}")
     IO.puts("\n--- info (what the strategy mapped) ---")
@@ -112,6 +124,8 @@ defmodule Demo.Router do
     # `info/1` can be checked against what intervals.icu actually returns.
     IO.puts("\n--- raw athlete payload ---")
     IO.inspect(auth.extra.raw_info.athlete, limit: :infinity, printable_limit: :infinity)
+
+    probe(auth)
 
     unmapped =
       auth.extra.raw_info.athlete
@@ -132,6 +146,67 @@ defmodule Demo.Router do
     <p><a href="/">start again</a></p>
     """)
   end
+
+  # Asks intervals.icu directly what this token can reach. The activities and
+  # wellness endpoints act as controls: if they succeed while the athlete
+  # endpoint 403s, the token is fine and that endpoint is specifically
+  # restricted, rather than the grant being wrong.
+  defp probe(auth) do
+    alias Ueberauth.Strategy.IntervalsIcu.OAuth
+
+    token = auth.extra.raw_info.token
+    id = auth.uid || "0"
+    today = Date.utc_today()
+    range = "oldest=#{Date.add(today, -7)}&newest=#{today}"
+
+    paths = [
+      {"athlete (id 0)", "/api/v1/athlete/0"},
+      {"athlete (real id)", "/api/v1/athlete/#{id}"},
+      {"athlete profile", "/api/v1/athlete/0/profile"},
+      {"sport settings", "/api/v1/athlete/0/sport-settings"},
+      {"activities  [control: ACTIVITY:READ]", "/api/v1/athlete/0/activities?#{range}"},
+      {"wellness    [control: WELLNESS:READ]", "/api/v1/athlete/0/wellness?#{range}"}
+    ]
+
+    IO.puts("\n--- endpoint probe (what this bearer token can actually reach) ---")
+
+    Enum.each(paths, fn {label, path} ->
+      result =
+        case OAuth.get(token, path) do
+          {:ok, %Req.Response{status: status, body: body}} ->
+            "#{status}  #{summarise(body)}"
+
+          {:error, exception} ->
+            "ERR  #{Exception.message(exception)}"
+        end
+
+      IO.puts(String.pad_trailing(label, 40) <> result)
+    end)
+
+    IO.puts("""
+
+    To revoke this grant:
+        curl -X DELETE https://intervals.icu/api/v1/disconnect-app \\
+          -H 'authorization: Bearer #{token.access_token}'
+    """)
+  end
+
+  defp requested_scope do
+    {_strategy, opts} = Application.get_env(:ueberauth, Ueberauth)[:providers][:intervals_icu]
+    Keyword.get(opts, :default_scope, "(none)")
+  end
+
+  defp summarise(body) when is_map(body) do
+    keys = body |> Map.keys() |> Enum.sort() |> Enum.take(12)
+    "map with #{map_size(body)} keys: #{Enum.join(keys, ", ")}"
+  end
+
+  defp summarise(body) when is_list(body), do: "list of #{length(body)}"
+
+  defp summarise(body) when is_binary(body),
+    do: body |> String.replace(~r/\s+/, " ") |> String.slice(0, 160)
+
+  defp summarise(body), do: inspect(body, limit: 5)
 
   defp render_failure(conn, failure) do
     IO.puts("\n=== FAILURE ===")
