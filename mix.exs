@@ -8,9 +8,17 @@ defmodule UeberauthIntervalsIcu.MixProject do
     [
       app: :ueberauth_intervals_icu,
       version: @version,
-      elixir: "~> 1.20",
+      elixir: "~> 1.15",
       start_permanent: Mix.env() == :prod,
       elixirc_paths: elixirc_paths(Mix.env()),
+      test_coverage: [
+        # Test support code is not part of the library's coverage.
+        ignore_modules: [Ueberauth.IntervalsIcu.TestHelpers],
+        # Actual coverage sits around 95%. The floor is deliberately a little
+        # below that: high enough to catch a meaningfully untested addition,
+        # loose enough that a small refactor does not fail CI.
+        summary: [threshold: 90]
+      ],
       deps: deps(),
       description: description(),
       package: package(),
