@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.1.1](https://github.com/hjemmel/ueberauth_intervals_icu/compare/v0.1.0...v0.1.1) (2026-08-12)
+
+
+### Bug Fixes
+
+* add SETTINGS:READ to the default scope ([ac8054c](https://github.com/hjemmel/ueberauth_intervals_icu/commit/ac8054c97c74105fb9258f6715a017f88e9dabb2))
+* fetch query params before reading them in both phases ([81304f5](https://github.com/hjemmel/ueberauth_intervals_icu/commit/81304f52e4bbf67068a67841df470203ac8e93d6))
+* fetch query params before reading them in both phases ([9bbe76a](https://github.com/hjemmel/ueberauth_intervals_icu/commit/9bbe76aa9d7e5f59edf981aeda7d9b099f4075bd))
+* map the real athlete fields and drop stray credentials ([5bdeb41](https://github.com/hjemmel/ueberauth_intervals_icu/commit/5bdeb416c022699bb402633b482f1e3c0718270f))
+
 ## 0.1.0 (2026-08-12)
 
 Initial release.
