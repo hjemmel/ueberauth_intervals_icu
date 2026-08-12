@@ -32,11 +32,47 @@ defmodule Ueberauth.Strategy.IntervalsIcuTest do
     test "documents the defaults the strategy ships with" do
       defaults = IntervalsIcu.default_options()
 
-      assert defaults[:default_scope] == "ACTIVITY:READ,WELLNESS:READ"
+      assert defaults[:default_scope] == "ACTIVITY:READ,WELLNESS:READ,SETTINGS:READ"
       assert defaults[:uid_field] == :id
       assert defaults[:fetch_athlete] == true
       assert defaults[:userinfo_endpoint] == "/api/v1/athlete/0"
       assert defaults[:oauth2_module] == Ueberauth.Strategy.IntervalsIcu.OAuth
+    end
+  end
+
+  # Regression: both phases used to read conn.params without fetching them.
+  # Under Phoenix that works, because params are always fetched by then. In a
+  # plain Plug pipeline the request phase raised ArgumentError, and the callback
+  # phase silently fell through to "missing_code" because %Plug.Conn.Unfetched{}
+  # never matches %{"code" => _}.
+  describe "connections whose params have not been fetched" do
+    test "the request phase fetches them itself" do
+      conn = strategy_conn(%{"scope" => "CALENDAR:READ"})
+
+      assert %Plug.Conn.Unfetched{} = conn.params
+
+      conn = IntervalsIcu.handle_request!(conn)
+
+      assert query_params(conn)["scope"] == "CALENDAR:READ"
+    end
+
+    test "the callback phase fetches them itself rather than reporting missing_code" do
+      stub_intervals_icu(token: token_response(), athlete: athlete_response())
+
+      conn = strategy_conn(%{"code" => "the-code"})
+
+      assert %Plug.Conn.Unfetched{} = conn.params
+
+      conn = IntervalsIcu.handle_callback!(conn)
+
+      refute Map.has_key?(conn.assigns, :ueberauth_failure)
+      assert IntervalsIcu.uid(conn) == "i123456"
+    end
+
+    test "a denial is still recognised without fetched params" do
+      conn = %{"error" => "access_denied"} |> strategy_conn() |> IntervalsIcu.handle_callback!()
+
+      assert error_keys(conn) == ["access_denied"]
     end
   end
 
@@ -54,7 +90,17 @@ defmodule Ueberauth.Strategy.IntervalsIcuTest do
     test "requests the default scope when none is given" do
       conn = IntervalsIcu.handle_request!(strategy_conn())
 
-      assert query_params(conn)["scope"] == "ACTIVITY:READ,WELLNESS:READ"
+      assert query_params(conn)["scope"] == "ACTIVITY:READ,WELLNESS:READ,SETTINGS:READ"
+    end
+
+    # Verified against the live service: /api/v1/athlete/0 returns 403 without
+    # SETTINGS:READ, so a default that omits it makes the out-of-the-box
+    # configuration fail on first login.
+    test "the default scope covers the athlete endpoint that :fetch_athlete uses" do
+      defaults = IntervalsIcu.default_options()
+
+      assert defaults[:fetch_athlete] == true
+      assert defaults[:default_scope] =~ "SETTINGS:READ"
     end
 
     test "honours a :default_scope option" do
@@ -114,7 +160,7 @@ defmodule Ueberauth.Strategy.IntervalsIcuTest do
       assert %Token{access_token: "d842c1fc25f241e5ae440d09756448a9"} =
                conn.private.intervals_icu_token
 
-      assert conn.private.intervals_icu_athlete["email"] == "david@example.com"
+      assert conn.private.intervals_icu_athlete["email"] == "athlete@example.com"
     end
 
     test "sends the authorization code to the token endpoint" do
@@ -193,12 +239,12 @@ defmodule Ueberauth.Strategy.IntervalsIcuTest do
       conn = callback(%{"code" => "the-code"}, fetch_athlete: false)
 
       assert conn.private.intervals_icu_athlete == %{
-               "id" => "2049151",
-               "name" => "David (intervals.icu)"
+               "id" => "i123456",
+               "name" => "Test Athlete"
              }
 
-      assert IntervalsIcu.uid(conn) == "2049151"
-      assert IntervalsIcu.info(conn).name == "David (intervals.icu)"
+      assert IntervalsIcu.uid(conn) == "i123456"
+      assert IntervalsIcu.info(conn).name == "Test Athlete"
     end
 
     test "succeeds even when the token response carries no athlete" do
@@ -331,13 +377,13 @@ defmodule Ueberauth.Strategy.IntervalsIcuTest do
     test "uses the athlete id by default" do
       conn = callback(%{"code" => "the-code"})
 
-      assert IntervalsIcu.uid(conn) == "2049151"
+      assert IntervalsIcu.uid(conn) == "i123456"
     end
 
     test "honours a custom :uid_field" do
       conn = callback(%{"code" => "the-code"}, uid_field: :email)
 
-      assert IntervalsIcu.uid(conn) == "david@example.com"
+      assert IntervalsIcu.uid(conn) == "athlete@example.com"
     end
 
     test "returns nil for a uid_field the athlete does not have" do
@@ -388,44 +434,26 @@ defmodule Ueberauth.Strategy.IntervalsIcuTest do
       info = %{"code" => "the-code"} |> callback() |> IntervalsIcu.info()
 
       assert %Info{
-               name: "David (intervals.icu)",
-               first_name: "David",
-               last_name: "Tinker",
-               email: "david@example.com",
-               image: "https://intervals.icu/avatar/2049151.jpg",
-               location: "Cape Town, Western Cape, South Africa"
+               name: "Test Athlete",
+               first_name: "Test",
+               last_name: "Athlete",
+               email: "athlete@example.com",
+               description: "Rides bikes",
+               birthday: "1985-04-12",
+               image: "https://storage.googleapis.com/intervals-icu-images/profile_pics/497f63b3",
+               location: "Melbourne, Victoria, Australia"
              } = info
     end
 
-    test "builds a profile URL from the athlete id" do
+    test "builds profile and website URLs" do
       stub_intervals_icu(token: token_response(), athlete: athlete_response())
 
       info = %{"code" => "the-code"} |> callback() |> IntervalsIcu.info()
 
-      assert info.urls == %{profile: "https://intervals.icu/athlete/2049151"}
-    end
-
-    test "accepts snake_case name fields as an alternative spelling" do
-      athlete =
-        athlete_response(%{"firstname" => nil, "first_name" => "Dave", "last_name" => "T"})
-        |> Map.drop(["lastname"])
-
-      stub_intervals_icu(token: token_response(), athlete: athlete)
-
-      info = %{"code" => "the-code"} |> callback() |> IntervalsIcu.info()
-
-      assert info.first_name == "Dave"
-      assert info.last_name == "T"
-    end
-
-    test "falls back through the avatar field spellings" do
-      athlete = athlete_response() |> Map.drop(["profile_medium"]) |> Map.put("profile", "p.jpg")
-
-      stub_intervals_icu(token: token_response(), athlete: athlete)
-
-      info = %{"code" => "the-code"} |> callback() |> IntervalsIcu.info()
-
-      assert info.image == "p.jpg"
+      assert info.urls == %{
+               profile: "https://intervals.icu/athlete/i123456",
+               website: "https://example.com"
+             }
     end
 
     test "builds the location from whichever parts are present" do
@@ -435,7 +463,7 @@ defmodule Ueberauth.Strategy.IntervalsIcuTest do
 
       info = %{"code" => "the-code"} |> callback() |> IntervalsIcu.info()
 
-      assert info.location == "Cape Town"
+      assert info.location == "Melbourne"
     end
 
     test "is nil-safe when the athlete payload is nearly empty" do
@@ -444,7 +472,7 @@ defmodule Ueberauth.Strategy.IntervalsIcuTest do
       info = %{"code" => "the-code"} |> callback() |> IntervalsIcu.info()
 
       assert %Info{name: nil, email: nil, image: nil, location: nil, first_name: nil} = info
-      assert info.urls == %{profile: "https://intervals.icu/athlete/1"}
+      assert info.urls == %{profile: "https://intervals.icu/athlete/1", website: nil}
     end
 
     test "has a nil profile URL when there is no athlete id" do
@@ -455,7 +483,7 @@ defmodule Ueberauth.Strategy.IntervalsIcuTest do
         |> callback(fetch_athlete: false)
         |> IntervalsIcu.info()
 
-      assert info.urls == %{profile: nil}
+      assert info.urls == %{profile: nil, website: nil}
     end
   end
 
@@ -469,9 +497,23 @@ defmodule Ueberauth.Strategy.IntervalsIcuTest do
                IntervalsIcu.extra(conn)
 
       assert token.access_token == "d842c1fc25f241e5ae440d09756448a9"
-      # nothing from the athlete payload is lost, even fields info/1 ignores
+      # fields info/1 ignores are still available to the application
       assert athlete["sex"] == "M"
-      assert athlete["timezone"] == "Africa/Johannesburg"
+      assert athlete["timezone"] == "Australia/Melbourne"
+    end
+
+    test "drops credentials that the athlete settings payload happens to carry" do
+      stub_intervals_icu(token: token_response(), athlete: athlete_response())
+
+      conn = callback(%{"code" => "the-code"})
+
+      refute Map.has_key?(conn.private.intervals_icu_athlete, "icu_api_key")
+      refute Map.has_key?(conn.private.intervals_icu_athlete, "icu_friend_invite_token")
+
+      %Extra{raw_info: %{athlete: athlete}} = IntervalsIcu.extra(conn)
+
+      refute Map.has_key?(athlete, "icu_api_key")
+      refute Map.has_key?(athlete, "icu_friend_invite_token")
     end
   end
 

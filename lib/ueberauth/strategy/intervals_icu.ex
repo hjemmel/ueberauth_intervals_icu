@@ -23,7 +23,10 @@ defmodule Ueberauth.Strategy.IntervalsIcu do
   ## Options
 
     * `:default_scope` - scopes requested when the request phase does not receive
-      a `scope` query parameter. Defaults to `"ACTIVITY:READ,WELLNESS:READ"`.
+      a `scope` query parameter. Defaults to
+      `"ACTIVITY:READ,WELLNESS:READ,SETTINGS:READ"`. `SETTINGS:READ` is included
+      because `:fetch_athlete` defaults to true and the athlete endpoint
+      requires it; see "Fetching the athlete" below.
 
     * `:fetch_athlete` - whether to call the athlete endpoint after the token
       exchange to build a fuller `Ueberauth.Auth.Info`. Defaults to `true`.
@@ -53,11 +56,17 @@ defmodule Ueberauth.Strategy.IntervalsIcu do
   strategy can identify the athlete without any further request.
 
   By default it still calls `:userinfo_endpoint` to populate a richer
-  `Ueberauth.Auth.Info`, mirroring how most Ueberauth strategies behave. That
-  endpoint may require a scope your application did not request, in which case
-  intervals.icu answers `403` and authentication fails.
+  `Ueberauth.Auth.Info`, mirroring how most Ueberauth strategies behave.
 
-  If that happens, either request the necessary scope or turn the call off:
+  **That endpoint requires `SETTINGS:READ`**, which is why the default scope
+  includes it. Without that scope intervals.icu answers `403` and
+  authentication fails.
+
+  So if you override `:default_scope`, either keep `SETTINGS:READ` in it:
+
+      default_scope: "ACTIVITY:READ,SETTINGS:READ"
+
+  or turn the athlete fetch off:
 
       providers: [
         intervals_icu: {Ueberauth.Strategy.IntervalsIcu, [fetch_athlete: false]}
@@ -65,7 +74,13 @@ defmodule Ueberauth.Strategy.IntervalsIcu do
 
   With `fetch_athlete: false` no extra request is made and the auth struct is
   built from the athlete map inside the token response. You get `uid` and
-  `name`, but not `email` or the other profile fields.
+  `name`, but not `email` or the other profile fields — and the athlete is not
+  asked to grant access to their settings.
+
+  Note that `/api/v1/athlete/0` returns roughly 160 fields — the athlete's
+  whole settings object, including sync state for Garmin, Strava, Wahoo, Zwift
+  and the rest. It all arrives in `extra.raw_info.athlete`, so take the fields
+  you need rather than persisting the struct wholesale.
 
   ## Tokens do not expire, and there are no refresh tokens
 
@@ -78,10 +93,31 @@ defmodule Ueberauth.Strategy.IntervalsIcu do
 
       DELETE https://intervals.icu/api/v1/disconnect-app
       Authorization: Bearer <token>
+
+  ## Plain Plug pipelines
+
+  Under Phoenix everything below is already handled. In a bare `Plug.Router`
+  pipeline, two plugs must run **before** `plug Ueberauth`:
+
+      plug :fetch_session       # Ueberauth's CSRF check calls fetch_session/1
+      plug :fetch_query_params  # ...and reads conn.params["state"]
+      plug Ueberauth
+
+  Both are required by Ueberauth itself, in `Ueberauth.Strategy.run_callback/2`,
+  which runs before this strategy is reached. Without them the callback phase
+  raises `ArgumentError` rather than failing cleanly. Use `Plug.Parsers` in
+  place of `:fetch_query_params` if you accept POST callbacks.
+
+  This strategy additionally calls `Plug.Conn.fetch_query_params/1` in both
+  phases, so it behaves correctly even when the CSRF check is bypassed with
+  `ignores_csrf_attack: true`.
+
+  See `examples/oauth_demo.exs` in the repository for a complete working
+  pipeline.
   """
 
   use Ueberauth.Strategy,
-    default_scope: "ACTIVITY:READ,WELLNESS:READ",
+    default_scope: "ACTIVITY:READ,WELLNESS:READ,SETTINGS:READ",
     uid_field: :id,
     fetch_athlete: true,
     userinfo_endpoint: "/api/v1/athlete/0",
@@ -100,6 +136,7 @@ defmodule Ueberauth.Strategy.IntervalsIcu do
   """
   @impl Ueberauth.Strategy
   def handle_request!(conn) do
+    conn = fetch_query_params(conn)
     scopes = conn.params["scope"] || option(conn, :default_scope)
 
     params =
@@ -118,7 +155,11 @@ defmodule Ueberauth.Strategy.IntervalsIcu do
   the athlete is fetched. A denial arrives as `?error=access_denied`.
   """
   @impl Ueberauth.Strategy
-  def handle_callback!(%Plug.Conn{params: %{"code" => code}} = conn) do
+  def handle_callback!(conn) do
+    conn |> fetch_query_params() |> do_handle_callback()
+  end
+
+  defp do_handle_callback(%Plug.Conn{params: %{"code" => code}} = conn) do
     params = [code: code]
     opts = [redirect_uri: callback_url(conn)]
 
@@ -131,12 +172,12 @@ defmodule Ueberauth.Strategy.IntervalsIcu do
     end
   end
 
-  def handle_callback!(%Plug.Conn{params: %{"error" => error_key}} = conn) do
+  defp do_handle_callback(%Plug.Conn{params: %{"error" => error_key}} = conn) do
     description = conn.params["error_description"] || error_key
     set_errors!(conn, [error(error_key, description)])
   end
 
-  def handle_callback!(conn) do
+  defp do_handle_callback(conn) do
     set_errors!(conn, [error("missing_code", "No authorization code received")])
   end
 
@@ -194,13 +235,14 @@ defmodule Ueberauth.Strategy.IntervalsIcu do
 
     %Info{
       name: athlete["name"],
-      first_name: athlete["firstname"] || athlete["first_name"],
-      last_name: athlete["lastname"] || athlete["last_name"],
-      nickname: athlete["username"],
+      first_name: athlete["firstname"],
+      last_name: athlete["lastname"],
       email: athlete["email"],
-      image: athlete["profile_medium"] || athlete["profile"] || athlete["avatar"],
+      description: athlete["bio"],
+      birthday: athlete["icu_date_of_birth"],
+      image: athlete["profile_medium"],
       location: location(athlete),
-      urls: %{profile: profile_url(athlete)}
+      urls: %{profile: profile_url(athlete), website: athlete["website"]}
     }
   end
 
@@ -266,11 +308,21 @@ defmodule Ueberauth.Strategy.IntervalsIcu do
     end
   end
 
+  # The athlete settings payload carries credentials that have nothing to do
+  # with this OAuth grant, so they are dropped before the athlete map is stored
+  # rather than travelling on into auth structs that get logged or persisted.
+  @dropped_athlete_fields ~w(icu_api_key icu_friend_invite_token)
+
   defp put_athlete(conn, token, athlete) do
     conn
     |> put_private(:intervals_icu_token, token)
-    |> put_private(:intervals_icu_athlete, athlete || %{})
+    |> put_private(:intervals_icu_athlete, drop_credentials(athlete))
   end
+
+  defp drop_credentials(athlete) when is_map(athlete),
+    do: Map.drop(athlete, @dropped_athlete_fields)
+
+  defp drop_credentials(_athlete), do: %{}
 
   defp token(conn), do: conn.private[:intervals_icu_token]
 

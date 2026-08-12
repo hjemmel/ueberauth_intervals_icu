@@ -158,7 +158,7 @@ defmodule Ueberauth.Strategy.IntervalsIcu.OAuthTest do
       assert token.access_token == "d842c1fc25f241e5ae440d09756448a9"
       assert token.token_type == "Bearer"
       assert token.scope == "ACTIVITY:READ,WELLNESS:READ"
-      assert token.athlete == %{"id" => "2049151", "name" => "David (intervals.icu)"}
+      assert token.athlete == %{"id" => "i123456", "name" => "Test Athlete"}
     end
 
     test "returns an error for a non-200 response" do
@@ -262,7 +262,7 @@ defmodule Ueberauth.Strategy.IntervalsIcu.OAuthTest do
 
       assert {:ok, %Req.Response{body: body}} = OAuth.get(token(), "/api/v1/athlete/0")
 
-      assert body["email"] == "david@example.com"
+      assert body["email"] == "athlete@example.com"
     end
 
     test "returns the error tuple when the request fails" do
