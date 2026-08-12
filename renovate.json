@@ -1,0 +1,11 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["github>the-unicorns/renovate-config"],
+  "packageRules": [
+    {
+      "description": "Dependency bumps must not cut Hex releases. The base preset enables :semanticCommits, which would otherwise label runtime dependency updates fix(deps) and make release-please publish a patch release for each one. Lockfile changes never reach consumers of a library, so a deliberate constraint change should be committed as fix: by hand instead.",
+      "matchManagers": ["mix", "github-actions"],
+      "semanticCommitType": "chore"
+    }
+  ]
+}
