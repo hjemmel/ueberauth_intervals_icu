@@ -34,11 +34,10 @@ client_secret =
 # This must happen before the router module below is defined: `plug Ueberauth`
 # calls `Ueberauth.init/1` at compile time, and that reads application config.
 
-# fetch_athlete: false so that logging in always succeeds and hands us a token.
-# The probe below then asks intervals.icu directly which endpoints that token
-# can actually reach, which is more informative than the login failing outright.
-# Set INTERVALS_ICU_FETCH_ATHLETE=true to exercise the default behaviour.
-fetch_athlete? = System.get_env("INTERVALS_ICU_FETCH_ATHLETE") == "true"
+# Set INTERVALS_ICU_FETCH_ATHLETE=false to skip the athlete request, which is
+# useful when a grant lacks SETTINGS:READ: login still succeeds and the probe
+# below can then show which endpoints that narrower token can reach.
+fetch_athlete? = System.get_env("INTERVALS_ICU_FETCH_ATHLETE") != "false"
 
 default_scope =
   System.get_env("INTERVALS_ICU_SCOPE", "ACTIVITY:READ,WELLNESS:READ,SETTINGS:READ")
@@ -120,15 +119,43 @@ defmodule Demo.Router do
     IO.puts("\n--- info (what the strategy mapped) ---")
     IO.inspect(auth.info, limit: :infinity)
 
-    # The point of this demo: the real athlete payload, so the mapping in
-    # `info/1` can be checked against what intervals.icu actually returns.
-    IO.puts("\n--- raw athlete payload ---")
-    IO.inspect(auth.extra.raw_info.athlete, limit: :infinity, printable_limit: :infinity)
+    # The athlete payload runs to 160+ keys and includes third-party account
+    # ids and sync state, so print key *names* in full but values only for the
+    # identity fields info/1 might reasonably map. Nothing here should be
+    # sensitive enough to worry about pasting into an issue.
+    athlete = auth.extra.raw_info.athlete
+
+    IO.puts("\n--- athlete keys (names only, #{map_size(athlete)} total) ---")
+
+    athlete
+    |> Map.keys()
+    |> Enum.sort()
+    |> Enum.chunk_every(4)
+    |> Enum.each(fn row ->
+      IO.puts("  " <> Enum.map_join(row, "", &String.pad_trailing(&1, 34)))
+    end)
+
+    IO.puts("\n--- identity-ish fields, with values ---")
+
+    identity_pattern =
+      # ^id$ rather than id$, so third-party account ids such as
+      # concept2_user_id stay out of output meant for pasting into an issue.
+      ~r/^(id|.*name|email|city|state|country|sex|gender|locale|timezone|time_zone|.*profile.*|avatar|image|photo|picture|bio)$/i
+
+    athlete
+    |> Enum.filter(fn {key, value} ->
+      Regex.match?(identity_pattern, key) and (is_binary(value) or is_number(value)) and
+        value != ""
+    end)
+    |> Enum.sort()
+    |> Enum.each(fn {key, value} ->
+      IO.puts("  " <> String.pad_trailing(key, 26) <> inspect(value))
+    end)
 
     probe(auth)
 
     unmapped =
-      auth.extra.raw_info.athlete
+      athlete
       |> Map.keys()
       |> Enum.reject(&(&1 in ~w(name firstname first_name lastname last_name username email
                                 profile_medium profile avatar city state country id)))
