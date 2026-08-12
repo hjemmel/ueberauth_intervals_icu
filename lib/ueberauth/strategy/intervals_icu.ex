@@ -77,6 +77,11 @@ defmodule Ueberauth.Strategy.IntervalsIcu do
   `name`, but not `email` or the other profile fields — and the athlete is not
   asked to grant access to their settings.
 
+  Note that `/api/v1/athlete/0` returns roughly 160 fields — the athlete's
+  whole settings object, including sync state for Garmin, Strava, Wahoo, Zwift
+  and the rest. It all arrives in `extra.raw_info.athlete`, so take the fields
+  you need rather than persisting the struct wholesale.
+
   ## Tokens do not expire, and there are no refresh tokens
 
   intervals.icu issues no refresh token and no expiry, so
@@ -230,13 +235,14 @@ defmodule Ueberauth.Strategy.IntervalsIcu do
 
     %Info{
       name: athlete["name"],
-      first_name: athlete["firstname"] || athlete["first_name"],
-      last_name: athlete["lastname"] || athlete["last_name"],
-      nickname: athlete["username"],
+      first_name: athlete["firstname"],
+      last_name: athlete["lastname"],
       email: athlete["email"],
-      image: athlete["profile_medium"] || athlete["profile"] || athlete["avatar"],
+      description: athlete["bio"],
+      birthday: athlete["icu_date_of_birth"],
+      image: athlete["profile_medium"],
       location: location(athlete),
-      urls: %{profile: profile_url(athlete)}
+      urls: %{profile: profile_url(athlete), website: athlete["website"]}
     }
   end
 
@@ -302,11 +308,21 @@ defmodule Ueberauth.Strategy.IntervalsIcu do
     end
   end
 
+  # The athlete settings payload carries credentials that have nothing to do
+  # with this OAuth grant, so they are dropped before the athlete map is stored
+  # rather than travelling on into auth structs that get logged or persisted.
+  @dropped_athlete_fields ~w(icu_api_key icu_friend_invite_token)
+
   defp put_athlete(conn, token, athlete) do
     conn
     |> put_private(:intervals_icu_token, token)
-    |> put_private(:intervals_icu_athlete, athlete || %{})
+    |> put_private(:intervals_icu_athlete, drop_credentials(athlete))
   end
+
+  defp drop_credentials(athlete) when is_map(athlete),
+    do: Map.drop(athlete, @dropped_athlete_fields)
+
+  defp drop_credentials(_athlete), do: %{}
 
   defp token(conn), do: conn.private[:intervals_icu_token]
 

@@ -15,7 +15,7 @@ defmodule Ueberauth.Strategy.IntervalsIcu.TokenTest do
                access_token: "d842c1fc25f241e5ae440d09756448a9",
                token_type: "Bearer",
                scope: "ACTIVITY:READ,WELLNESS:READ",
-               athlete: %{"id" => "2049151", "name" => "David (intervals.icu)"},
+               athlete: %{"id" => "i123456", "name" => "Test Athlete"},
                other_params: %{}
              } = token
     end

@@ -20,29 +20,43 @@ defmodule Ueberauth.IntervalsIcu.TestHelpers do
         "token_type" => "Bearer",
         "access_token" => "d842c1fc25f241e5ae440d09756448a9",
         "scope" => "ACTIVITY:READ,WELLNESS:READ",
-        "athlete" => %{"id" => "2049151", "name" => "David (intervals.icu)"}
+        "athlete" => %{"id" => "i123456", "name" => "Test Athlete"}
       },
       overrides
     )
   end
 
   @doc """
-  A richer athlete payload of the sort `/api/v1/athlete/0` returns.
+  An athlete payload using the real field names `/api/v1/athlete/0` returns.
+
+  Verified against the live service. The genuine response carries around 160
+  keys; this keeps the ones the strategy maps, plus `icu_api_key` because the
+  real payload really does include the athlete's API key and the tests need to
+  reason about that.
+
+  Note that athlete ids are not numeric: real ones look like `"i123456"`.
   """
   def athlete_response(overrides \\ %{}) do
     Map.merge(
       %{
-        "id" => "2049151",
-        "name" => "David (intervals.icu)",
-        "firstname" => "David",
-        "lastname" => "Tinker",
-        "email" => "david@example.com",
-        "profile_medium" => "https://intervals.icu/avatar/2049151.jpg",
-        "city" => "Cape Town",
-        "state" => "Western Cape",
-        "country" => "South Africa",
+        "id" => "i123456",
+        "name" => "Test Athlete",
+        "firstname" => "Test",
+        "lastname" => "Athlete",
+        "email" => "athlete@example.com",
+        "bio" => "Rides bikes",
+        "website" => "https://example.com",
+        "icu_date_of_birth" => "1985-04-12",
+        "profile_medium" =>
+          "https://storage.googleapis.com/intervals-icu-images/profile_pics/497f63b3",
+        "city" => "Melbourne",
+        "state" => "Victoria",
+        "country" => "Australia",
         "sex" => "M",
-        "timezone" => "Africa/Johannesburg"
+        "locale" => "en",
+        "timezone" => "Australia/Melbourne",
+        "icu_api_key" => "secret-api-key",
+        "icu_friend_invite_token" => "secret-invite-token"
       },
       overrides
     )

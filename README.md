@@ -181,6 +181,8 @@ providers: [
 
 With `fetch_athlete: false` no extra request is made, and the auth struct is built from the athlete map already present in the token response. You still get `uid` and `name`, but not `email` or the other profile fields — and the athlete is not asked to grant access to their settings, which keeps the consent screen narrower.
 
+Note that `/api/v1/athlete/0` returns roughly **160 fields** — the athlete's whole settings object, including sync state for Garmin, Strava, Wahoo, Zwift and the rest. It all arrives in `extra.raw_info.athlete`, so take the fields you need rather than persisting the struct wholesale.
+
 ## Options
 
 | Option | Default | Purpose |
