@@ -32,7 +32,7 @@ defmodule Ueberauth.Strategy.IntervalsIcuTest do
     test "documents the defaults the strategy ships with" do
       defaults = IntervalsIcu.default_options()
 
-      assert defaults[:default_scope] == "ACTIVITY:READ,WELLNESS:READ"
+      assert defaults[:default_scope] == "ACTIVITY:READ,WELLNESS:READ,SETTINGS:READ"
       assert defaults[:uid_field] == :id
       assert defaults[:fetch_athlete] == true
       assert defaults[:userinfo_endpoint] == "/api/v1/athlete/0"
@@ -90,7 +90,17 @@ defmodule Ueberauth.Strategy.IntervalsIcuTest do
     test "requests the default scope when none is given" do
       conn = IntervalsIcu.handle_request!(strategy_conn())
 
-      assert query_params(conn)["scope"] == "ACTIVITY:READ,WELLNESS:READ"
+      assert query_params(conn)["scope"] == "ACTIVITY:READ,WELLNESS:READ,SETTINGS:READ"
+    end
+
+    # Verified against the live service: /api/v1/athlete/0 returns 403 without
+    # SETTINGS:READ, so a default that omits it makes the out-of-the-box
+    # configuration fail on first login.
+    test "the default scope covers the athlete endpoint that :fetch_athlete uses" do
+      defaults = IntervalsIcu.default_options()
+
+      assert defaults[:fetch_athlete] == true
+      assert defaults[:default_scope] =~ "SETTINGS:READ"
     end
 
     test "honours a :default_scope option" do

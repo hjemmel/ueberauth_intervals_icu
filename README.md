@@ -116,7 +116,9 @@ Each scope takes a `:READ` or `:WRITE` suffix:
 | `LIBRARY` | Workout and plan library |
 | `SETTINGS` | Athlete profile and sport settings |
 
-The default is `"ACTIVITY:READ,WELLNESS:READ"`.
+The default is `"ACTIVITY:READ,WELLNESS:READ,SETTINGS:READ"`.
+
+`SETTINGS:READ` is in there because `:fetch_athlete` defaults to `true` and `/api/v1/athlete/0` requires it. If you override `:default_scope`, either keep `SETTINGS:READ` or set `fetch_athlete: false` — see [below](#the-athlete-fetch-and-when-to-turn-it-off).
 
 You can also request scopes per request, which overrides the configured default:
 
@@ -159,7 +161,17 @@ An OAuth token only ever grants access to the authorising athlete's own data. Co
 
 After exchanging the code, the strategy calls `/api/v1/athlete/0` to build a fuller `Ueberauth.Auth.Info`, the way most Ueberauth strategies do.
 
-That endpoint may need a scope your app did not request, in which case intervals.icu answers `403` and authentication fails. If you hit that, either request `SETTINGS:READ` or skip the call:
+**That endpoint requires `SETTINGS:READ`** — verified against the live service, which answers `403` without it. That is why the default scope includes it.
+
+So if you override `:default_scope`, either keep `SETTINGS:READ` in it:
+
+```elixir
+providers: [
+  intervals_icu: {Ueberauth.Strategy.IntervalsIcu, [default_scope: "ACTIVITY:READ,SETTINGS:READ"]}
+]
+```
+
+or skip the call entirely:
 
 ```elixir
 providers: [
@@ -167,13 +179,13 @@ providers: [
 ]
 ```
 
-With `fetch_athlete: false` no extra request is made, and the auth struct is built from the athlete map already present in the token response. You still get `uid` and `name`, but not `email` or the other profile fields.
+With `fetch_athlete: false` no extra request is made, and the auth struct is built from the athlete map already present in the token response. You still get `uid` and `name`, but not `email` or the other profile fields — and the athlete is not asked to grant access to their settings, which keeps the consent screen narrower.
 
 ## Options
 
 | Option | Default | Purpose |
 |---|---|---|
-| `:default_scope` | `"ACTIVITY:READ,WELLNESS:READ"` | Scopes requested when no `scope` parameter is given |
+| `:default_scope` | `"ACTIVITY:READ,WELLNESS:READ,SETTINGS:READ"` | Scopes requested when no `scope` parameter is given |
 | `:fetch_athlete` | `true` | Whether to call the athlete endpoint after the token exchange |
 | `:userinfo_endpoint` | `"/api/v1/athlete/0"` | Endpoint used when `:fetch_athlete` is true |
 | `:uid_field` | `:id` | Which athlete field becomes `auth.uid` |

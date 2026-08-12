@@ -23,7 +23,10 @@ defmodule Ueberauth.Strategy.IntervalsIcu do
   ## Options
 
     * `:default_scope` - scopes requested when the request phase does not receive
-      a `scope` query parameter. Defaults to `"ACTIVITY:READ,WELLNESS:READ"`.
+      a `scope` query parameter. Defaults to
+      `"ACTIVITY:READ,WELLNESS:READ,SETTINGS:READ"`. `SETTINGS:READ` is included
+      because `:fetch_athlete` defaults to true and the athlete endpoint
+      requires it; see "Fetching the athlete" below.
 
     * `:fetch_athlete` - whether to call the athlete endpoint after the token
       exchange to build a fuller `Ueberauth.Auth.Info`. Defaults to `true`.
@@ -53,11 +56,17 @@ defmodule Ueberauth.Strategy.IntervalsIcu do
   strategy can identify the athlete without any further request.
 
   By default it still calls `:userinfo_endpoint` to populate a richer
-  `Ueberauth.Auth.Info`, mirroring how most Ueberauth strategies behave. That
-  endpoint may require a scope your application did not request, in which case
-  intervals.icu answers `403` and authentication fails.
+  `Ueberauth.Auth.Info`, mirroring how most Ueberauth strategies behave.
 
-  If that happens, either request the necessary scope or turn the call off:
+  **That endpoint requires `SETTINGS:READ`**, which is why the default scope
+  includes it. Without that scope intervals.icu answers `403` and
+  authentication fails.
+
+  So if you override `:default_scope`, either keep `SETTINGS:READ` in it:
+
+      default_scope: "ACTIVITY:READ,SETTINGS:READ"
+
+  or turn the athlete fetch off:
 
       providers: [
         intervals_icu: {Ueberauth.Strategy.IntervalsIcu, [fetch_athlete: false]}
@@ -65,7 +74,8 @@ defmodule Ueberauth.Strategy.IntervalsIcu do
 
   With `fetch_athlete: false` no extra request is made and the auth struct is
   built from the athlete map inside the token response. You get `uid` and
-  `name`, but not `email` or the other profile fields.
+  `name`, but not `email` or the other profile fields — and the athlete is not
+  asked to grant access to their settings.
 
   ## Tokens do not expire, and there are no refresh tokens
 
@@ -102,7 +112,7 @@ defmodule Ueberauth.Strategy.IntervalsIcu do
   """
 
   use Ueberauth.Strategy,
-    default_scope: "ACTIVITY:READ,WELLNESS:READ",
+    default_scope: "ACTIVITY:READ,WELLNESS:READ,SETTINGS:READ",
     uid_field: :id,
     fetch_athlete: true,
     userinfo_endpoint: "/api/v1/athlete/0",

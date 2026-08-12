@@ -75,9 +75,12 @@ defmodule Demo.Router do
   get "/" do
     send_html(conn, """
     <h1>intervals.icu OAuth demo</h1>
-    <p><a href="/auth/intervals_icu">Connect with intervals.icu</a></p>
-    <p>Request a different scope:
-      <a href="/auth/intervals_icu?scope=ACTIVITY:READ,SETTINGS:READ">with SETTINGS:READ</a>
+    <p><a href="/auth/intervals_icu">Connect with intervals.icu</a> (default scope)</p>
+    <p>
+      <a href="/auth/intervals_icu?scope=ACTIVITY:READ">without SETTINGS:READ</a>
+      &mdash; expected to fail with <code>forbidden</code>, because the athlete
+      endpoint requires it. Set <code>fetch_athlete: false</code> to use this
+      narrower scope.
     </p>
     """)
   end
