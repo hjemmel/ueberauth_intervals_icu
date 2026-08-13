@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.2](https://github.com/hjemmel/ueberauth_intervals_icu/compare/v0.1.1...v0.1.2) (2026-08-13)
+
+
+### Bug Fixes
+
+* degrade instead of failing when the athlete declines SETTINGS ([54e5e06](https://github.com/hjemmel/ueberauth_intervals_icu/commit/54e5e0695715384c33f87111ef47ce988c51a9f7))
+* degrade instead of failing when the athlete declines SETTINGS ([ed61194](https://github.com/hjemmel/ueberauth_intervals_icu/commit/ed61194480099d7fb1d635a65deec6b5d26671ca))
+
 ## [0.1.1](https://github.com/hjemmel/ueberauth_intervals_icu/compare/v0.1.0...v0.1.1) (2026-08-12)
 
 
