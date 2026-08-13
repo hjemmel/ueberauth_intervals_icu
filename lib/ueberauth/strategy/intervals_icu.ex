@@ -59,14 +59,25 @@ defmodule Ueberauth.Strategy.IntervalsIcu do
   `Ueberauth.Auth.Info`, mirroring how most Ueberauth strategies behave.
 
   **That endpoint requires `SETTINGS:READ`**, which is why the default scope
-  includes it. Without that scope intervals.icu answers `403` and
-  authentication fails.
+  includes it.
 
-  So if you override `:default_scope`, either keep `SETTINGS:READ` in it:
+  ### When the athlete declines
+
+  The consent screen has a checkbox per permission, so an athlete can grant
+  activities and wellness while declining settings. If that happens the athlete
+  endpoint answers `403`, and rather than failing a login over an optional
+  profile lookup, this strategy falls back to the id and name already in the
+  token response and logs a warning.
+
+  So authentication still succeeds, but `info` carries only `name`, with
+  `email` and the rest `nil`. Design your callback for that possibility: `uid`
+  is always present, everything beyond `name` is best-effort.
+
+  If you override `:default_scope`, either keep `SETTINGS:READ` in it:
 
       default_scope: "ACTIVITY:READ,SETTINGS:READ"
 
-  or turn the athlete fetch off:
+  or turn the athlete fetch off, which also silences the warning:
 
       providers: [
         intervals_icu: {Ueberauth.Strategy.IntervalsIcu, [fetch_athlete: false]}
@@ -122,6 +133,8 @@ defmodule Ueberauth.Strategy.IntervalsIcu do
     fetch_athlete: true,
     userinfo_endpoint: "/api/v1/athlete/0",
     oauth2_module: Ueberauth.Strategy.IntervalsIcu.OAuth
+
+  require Logger
 
   alias Ueberauth.Auth.Credentials
   alias Ueberauth.Auth.Extra
@@ -276,16 +289,23 @@ defmodule Ueberauth.Strategy.IntervalsIcu do
       {:ok, %Req.Response{status: 401}} ->
         set_errors!(conn, [error("token", "unauthorized")])
 
+      # The athlete can untick individual permissions on the consent screen, so
+      # a granted token may still not reach this endpoint. Failing the whole
+      # login over an optional profile lookup would be disproportionate when
+      # the token response already identifies the athlete, so degrade instead.
       {:ok, %Req.Response{status: 403}} ->
-        set_errors!(conn, [
-          error(
-            "forbidden",
-            "intervals.icu refused access to #{endpoint}. The granted scopes " <>
-              "(#{Enum.join(Token.scopes(token), ",")}) may not cover it. Request " <>
-              "SETTINGS:READ, or set `fetch_athlete: false` to build the auth " <>
-              "struct from the token response instead."
-          )
-        ])
+        Logger.warning("""
+        intervals.icu refused access to #{endpoint}, so #{inspect(__MODULE__)} \
+        built Ueberauth.Auth from the token response instead. uid and name are \
+        set; email and the other profile fields are nil.
+
+        The granted scopes are #{Enum.join(Token.scopes(token), ",")}. That \
+        endpoint needs SETTINGS:READ, which the athlete may have declined on \
+        the consent screen. Set `fetch_athlete: false` to skip this request and \
+        silence this warning.\
+        """)
+
+        put_athlete(conn, token, token.athlete)
 
       {:ok, %Req.Response{status: status, body: body}} when status in 200..399 and is_map(body) ->
         put_athlete(conn, token, body)

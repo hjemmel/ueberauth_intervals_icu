@@ -314,7 +314,7 @@ defmodule Ueberauth.Strategy.IntervalsIcuTest do
       assert [%{message_key: "token", message: "unauthorized"}] = errors(conn)
     end
 
-    test "a 403 on the athlete endpoint explains the scope fix and the escape hatch" do
+    test "a 403 on the athlete endpoint does not fail the login" do
       stub_intervals_icu(
         token: token_response(),
         athlete: fn conn -> Plug.Conn.send_resp(conn, 403, "") end
@@ -322,11 +322,29 @@ defmodule Ueberauth.Strategy.IntervalsIcuTest do
 
       conn = callback(%{"code" => "the-code"})
 
-      assert [%{message_key: "forbidden", message: message}] = errors(conn)
-      assert message =~ "SETTINGS:READ"
-      assert message =~ "fetch_athlete: false"
+      # The athlete can decline SETTINGS on the consent screen, so this must
+      # degrade rather than lock them out of an application entirely.
+      refute Map.has_key?(conn.assigns, :ueberauth_failure)
+      assert IntervalsIcu.uid(conn) == "i123456"
+      assert IntervalsIcu.info(conn).name == "Test Athlete"
+      assert IntervalsIcu.info(conn).email == nil
+    end
+
+    test "a 403 warns why the profile is sparse, naming the granted scopes" do
+      stub_intervals_icu(
+        token: token_response(),
+        athlete: fn conn -> Plug.Conn.send_resp(conn, 403, "") end
+      )
+
+      log =
+        ExUnit.CaptureLog.capture_log(fn ->
+          callback(%{"code" => "the-code"})
+        end)
+
+      assert log =~ "SETTINGS:READ"
+      assert log =~ "fetch_athlete: false"
       # names the scopes actually granted, so the mismatch is visible
-      assert message =~ "ACTIVITY:READ,WELLNESS:READ"
+      assert log =~ "ACTIVITY:READ,WELLNESS:READ"
     end
 
     test "reports other athlete endpoint failures" do

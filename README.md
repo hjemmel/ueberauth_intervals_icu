@@ -163,7 +163,21 @@ After exchanging the code, the strategy calls `/api/v1/athlete/0` to build a ful
 
 **That endpoint requires `SETTINGS:READ`** — verified against the live service, which answers `403` without it. That is why the default scope includes it.
 
-So if you override `:default_scope`, either keep `SETTINGS:READ` in it:
+### When the athlete declines
+
+The consent screen has a checkbox per permission, so an athlete can grant activities and wellness while declining settings. When that happens the athlete endpoint answers `403`, and rather than failing a login over an optional profile lookup, the strategy **falls back to the id and name from the token response** and logs a warning.
+
+Authentication still succeeds, but `info` carries only `name`, with `email` and the rest `nil`. Write your callback accordingly — `uid` is always present, anything beyond `name` is best-effort:
+
+```elixir
+def callback(%{assigns: %{ueberauth_auth: auth}} = conn, _params) do
+  # auth.uid       => always present
+  # auth.info.name => always present
+  # auth.info.email => nil if the athlete declined SETTINGS
+end
+```
+
+If you override `:default_scope`, either keep `SETTINGS:READ` in it:
 
 ```elixir
 providers: [
@@ -217,7 +231,6 @@ Failures arrive as `conn.assigns.ueberauth_failure.errors`, each with a `message
 | `token_error` | The token endpoint returned a non-200, most often an expired code |
 | `invalid_token_response` | The token endpoint returned 200 but no access token |
 | `token` | The athlete endpoint returned `401` |
-| `forbidden` | The athlete endpoint returned `403`, a scope problem; see above |
 | `athlete_error` | The athlete endpoint returned another error status |
 | `invalid_athlete_response` | The athlete endpoint returned a success status but not a JSON object |
 | `network_error` | The request never completed |
