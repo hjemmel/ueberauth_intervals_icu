@@ -42,7 +42,7 @@ defmodule UeberauthIntervalsIcu.MixProject do
       {:ueberauth, "~> 0.10"},
       {:req, "~> 0.5"},
       {:plug, "~> 1.16"},
-      {:ex_doc, "~> 0.34", only: :dev, runtime: false}
+      {:ex_doc, "~> 0.40", only: :dev, runtime: false}
     ]
   end
 
