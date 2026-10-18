@@ -82,7 +82,7 @@ plug :fetch_query_params  # ...and reads conn.params["state"]
 plug Ueberauth
 ```
 
-Both are required by Ueberauth itself, in `Ueberauth.Strategy.run_callback/2`, which runs before this strategy is reached. Leave either out and the callback raises `ArgumentError` instead of failing cleanly. Swap `:fetch_query_params` for `Plug.Parsers` if you accept POST callbacks.
+Both are required by Ueberauth itself, in the callback phase of `Ueberauth.Strategy`, which runs before this strategy is reached. Leave either out and the callback raises `ArgumentError` instead of failing cleanly. Swap `:fetch_query_params` for `Plug.Parsers` if you accept POST callbacks.
 
 The cookie session store also needs `conn.secret_key_base` set.
 

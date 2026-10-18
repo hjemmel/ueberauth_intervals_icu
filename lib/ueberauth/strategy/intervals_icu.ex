@@ -114,8 +114,8 @@ defmodule Ueberauth.Strategy.IntervalsIcu do
       plug :fetch_query_params  # ...and reads conn.params["state"]
       plug Ueberauth
 
-  Both are required by Ueberauth itself, in `Ueberauth.Strategy.run_callback/2`,
-  which runs before this strategy is reached. Without them the callback phase
+  Both are required by Ueberauth itself, in the callback phase of
+  `Ueberauth.Strategy`, which runs before this strategy is reached. Without them the callback phase
   raises `ArgumentError` rather than failing cleanly. Use `Plug.Parsers` in
   place of `:fetch_query_params` if you accept POST callbacks.
 
